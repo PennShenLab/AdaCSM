@@ -15,13 +15,17 @@ class DCSMBase():
     """Base Class"""
 
     def __init__(self, k=3, layers=None, distribution="Weibull",
-                 temp=1000., discount=1.0, random_state=42, fix=False, is_seed=False):
+                 temp=1000., discount=1.0, random_state=42, fix=False, is_seed=False,
+                 use_moe=False, num_experts=4, top_k=None):
         self.k = k
         self.layers = layers
         self.dist = distribution
         self.temp = temp
         self.discount = discount
         self.fitted = False
+        self.use_moe = use_moe
+        self.num_experts = num_experts
+        self.top_k = top_k
 
         self.random_state = random_state
         self.fix = fix
@@ -40,11 +44,15 @@ class DCSMBase():
                                          risks=risks,
                                          random_state=self.random_state,
                                          fix=self.fix,
-                                         is_seed=self.is_seed)  # .cuda()
+                                         is_seed=self.is_seed,
+                                         use_moe=self.use_moe,
+                                         num_experts=self.num_experts,
+                                         top_k=self.top_k)  # .cuda()
 
     def fit(self, x, t, e, vsize=0.15, val_data=None,
             iters=10000, learning_rate=1e-3, batch_size=100,
-            elbo=True, optimizer="Adam", random_state=100):
+            elbo=True, optimizer="Adam", random_state=100,
+            patience=100, early_stopping=True):
 
         r"""This method is used to train an instance of the DCSM model.
 
@@ -103,7 +111,9 @@ class DCSMBase():
                              n_iter=iters,
                              lr=learning_rate,
                              elbo=elbo,
-                             bs=batch_size)
+                             bs=batch_size,
+                             patience=patience,
+                             early_stopping=early_stopping)
 
         self.torch_model = model.eval()
         self.fitted = True

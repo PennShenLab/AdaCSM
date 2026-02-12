@@ -444,7 +444,7 @@ def log_transform(data, transform_ls):
 def formatted_data(x, t, e, idx, imputation_values=None):
     death_time = np.array(t[idx], dtype=float)
     censoring = np.array(e[idx], dtype=float)
-    covariates = np.array(x[idx])
+    covariates = np.array(x[idx], dtype=float)
     if imputation_values is not None:
         impute_covariates = impute_missing(data=covariates, imputation_values=imputation_values)
     else:
@@ -512,10 +512,16 @@ def print_missing_prop(covariates):
 
 
 def impute_missing(data, imputation_values):
-    copy = data
+    copy = data.copy()
     for i in np.arange(len(data)):
         row = data[i]
-        indices = np.isnan(row)
+        # Handle both numeric and object dtypes
+        if row.dtype == object:
+            # For object arrays, check for None or NaN string values
+            indices = np.array([pd.isna(x) for x in row])
+        else:
+            # For numeric arrays, use np.isnan
+            indices = np.isnan(row)
 
         for idx in np.arange(len(indices)):
             if indices[idx]:

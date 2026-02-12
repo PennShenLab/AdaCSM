@@ -75,7 +75,7 @@ for seed in [42, 73, 666, 777, 1009]:
         print('Data are normalized')
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
-        X_test = scaler.fit_transform(X_test)
+        X_test = scaler.transform(X_test)
     else:
         print('Data are not normalized')
 

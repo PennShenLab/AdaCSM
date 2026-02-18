@@ -8,6 +8,7 @@ from sklearn.manifold import TSNE
 import umap
 from lifelines.statistics import multivariate_logrank_test
 from lifelines import KaplanMeierFitter
+import os
 
 
 def plot_Weibull_cdf(t_horizon, shape, scale, data_name='sim', num_inst=1000, num_feat=200, seed=42):
@@ -23,6 +24,10 @@ def plot_Weibull_cdf(t_horizon, shape, scale, data_name='sim', num_inst=1000, nu
     plt.legend()
     # plt.title('Weibull CDF, Data: {}, Seed: {}'.format(data_name, seed))
     plt.title('Weibull CDF, Data: {}'.format(data_name), fontsize=16)
+    
+    # Create Figures directory if it doesn't exist
+    os.makedirs('./Figures', exist_ok=True)
+    
     if data_name == 'sim':
         plt.savefig('./Figures/Weibull_cdf_#clusters{}_{}_{}x{}_seed{}.png'.
                     format(len(shape), data_name, num_inst, num_feat, seed))
@@ -171,6 +176,9 @@ def plot_KM(y_list, cluster_method, data_name,
     plt.ylabel("Survival Probability", fontsize=18)
     plt.legend(fontsize=18)
 
+    # Create Figures directory if it doesn't exist
+    os.makedirs('./Figures', exist_ok=True)
+    
     if data_name == 'sim':
         plt.savefig('./Figures/{}_{}_KM_plot_#clusters{}_{}_{}x{}_seed{}.png'.
                     format(cluster_method, stage, len(y_list), data_name, num_inst, num_feat, seed))

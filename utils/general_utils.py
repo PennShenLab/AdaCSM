@@ -23,7 +23,7 @@ def combine_t_e(t, e):  # t is for time and e is for event (indicator)
     return y
 
 
-def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False, method='DCSM'):
+def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False, method='DCSM', use_moe=False, num_experts=4, top_k=None):
     print('param: ', param)
     e_train = np.array([[item[0] * 1 for item in y_train]]).T
     t_train = np.array([[item[1] for item in y_train]]).T
@@ -32,13 +32,22 @@ def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False
 
     model = DeepClusteringSurvivalMachines(k=param['k'], fix=fix, distribution=param['distribution'],
                  layers=param['layers'], discount=param['discount'],
-                 random_state=seed, is_seed=True)
+                 random_state=seed, is_seed=True, use_moe=use_moe, num_experts=num_experts, top_k=top_k)
 
     print('method: ', method)
+    if use_moe:
+        if top_k is not None:
+            print(f'Using Mixture of Experts with {num_experts} experts and top-k={top_k} routing')
+        else:
+            print(f'Using Mixture of Experts with {num_experts} experts (all experts)')
+    else:
+        print('Using standard MLP')
 
     # The fit method is called to train the model
     model.fit([X_train, X_test], [t_train, t_test], [e_train, e_test],
-              iters=param['iters'], learning_rate=param['learning_rate'])
+              iters=param['iters'], learning_rate=param['learning_rate'],
+              patience=param.get('patience', 100),
+              early_stopping=param.get('early_stopping', False))
     processed_data = model._preprocess_training_data(X_train, t_train, e_train,
                                                      vsize=0.15, val_data=None, random_state=100)
     x_train, t_train, e_train, x_val, t_val, e_val = processed_data

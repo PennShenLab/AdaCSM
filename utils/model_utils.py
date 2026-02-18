@@ -109,7 +109,7 @@ def train_dcsm(model,
               x_train, t_train, e_train,
               x_valid, t_valid, e_valid,
               n_iter=10000, lr=1e-3, elbo=True,
-              bs=100):
+              bs=100, patience=100, early_stopping=True):
     """Function to train the torch instance of the model."""
 
     # For padded variable length sequences we first unroll the input and
@@ -150,6 +150,7 @@ def train_dcsm(model,
     best_dic = []
     shape_list = []
     scale_list = []
+    patience_counter = 0
 
     # the 1st column is train loss and the 2nd is validation loss 3rd is valid c_ind, 4th is train c_ind
     results_all = np.zeros((n_iter, 4))
@@ -158,9 +159,9 @@ def train_dcsm(model,
     for i in tqdm(range(n_iter)):
         for j in range(nbatches):
 
-            xb = x_train[j * bs:(j + 1) * bs].cuda()
-            tb = t_train[j * bs:(j + 1) * bs].cuda()
-            eb = e_train[j * bs:(j + 1) * bs].cuda()
+            xb = x_train[j * bs:(j + 1) * bs]
+            tb = t_train[j * bs:(j + 1) * bs]
+            eb = e_train[j * bs:(j + 1) * bs]
 
             if xb.shape[0] == 0:
                 continue
@@ -183,7 +184,7 @@ def train_dcsm(model,
         valid_loss = 0
         for r in range(model.risks):
             valid_loss += conditional_loss(model,
-                                           x_valid.cuda(),
+                                           x_valid,
                                            t_valid_,
                                            e_valid_,
                                            elbo=False,
@@ -206,6 +207,9 @@ def train_dcsm(model,
         if best_dic:
             if c_index_valid >= best_dic[0]:
                 best_dic = [c_index_valid, dic, i]
+                patience_counter = 0  # Reset patience when improvement found
+            else:
+                patience_counter += 1
         else:
             best_dic = [c_index_valid, dic, i]
 
@@ -213,6 +217,12 @@ def train_dcsm(model,
         results_all[i, 1] = valid_loss
         results_all[i, 2] = c_index_valid
         results_all[i, 3] = c_index_train
+        
+        # Early stopping
+        if early_stopping and patience_counter >= patience:
+            print(f'\nEarly stopping at epoch {i} (no improvement for {patience} epochs)')
+            results_all = results_all[:i+1]  # Trim unused rows
+            break
 
     plot_loss_c_index(results_all, lr, bs, model.k, model.dist, model.discount)
 

@@ -11,12 +11,75 @@ import torch
 import numpy as np
 
 
-def create_representation(inputdim, layers, activation):
+class MixtureOfExpertsLayer(nn.Module):
+    """Mixture of Experts Layer for representation learning.
+    
+    Parameters
+    ----------
+    inputdim : int
+        Dimensionality of the input features.
+    hidden : int
+        Number of neurons in each expert's hidden layer.
+    num_experts : int
+        Number of expert networks.
+    top_k : int or None
+        If None, use all experts. If int, use only top-k experts by gating weight.
+    """
+    
+    def __init__(self, inputdim, hidden, num_experts=4, top_k=None):
+        super(MixtureOfExpertsLayer, self).__init__()
+        self.num_experts = num_experts
+        self.hidden = hidden
+        self.top_k = top_k if top_k is not None else num_experts  # Default: use all experts
+        
+        # Ensure top_k doesn't exceed num_experts
+        if self.top_k > num_experts:
+            self.top_k = num_experts
+        
+        # Create expert networks
+        self.experts = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(inputdim, hidden, bias=False),
+                nn.ReLU6()
+            ) for _ in range(num_experts)
+        ])
+        
+        # Gating network
+        self.gate = nn.Sequential(
+            nn.Linear(inputdim, num_experts),
+            nn.Softmax(dim=-1)
+        )
+    
+    def forward(self, x):
+        # Compute gate weights
+        gate_weights = self.gate(x)  # [batch, num_experts]
+        
+        # Apply top-k masking if needed
+        if self.top_k < self.num_experts:
+            # Get top-k indices and values
+            topk_values, topk_indices = torch.topk(gate_weights, k=self.top_k, dim=-1)  # [batch, top_k]
+            
+            # Create mask and renormalize
+            mask = torch.zeros_like(gate_weights)
+            mask.scatter_(1, topk_indices, 1.0)
+            gate_weights = gate_weights * mask
+            gate_weights = gate_weights / (gate_weights.sum(dim=-1, keepdim=True) + 1e-8)  # Renormalize
+        
+        # Compute expert outputs
+        expert_outputs = torch.stack([expert(x) for expert in self.experts], dim=1)  # [batch, num_experts, hidden]
+        
+        # Weighted combination
+        output = torch.sum(gate_weights.unsqueeze(-1) * expert_outputs, dim=1)  # [batch, hidden]
+        
+        return output
+
+
+def create_representation(inputdim, layers, activation, use_moe=False, num_experts=4, top_k=None):
     r"""Helper function to generate the representation function for DCSM.
 
   Deep Clustering Survival Machines learns a representation (\ Phi(X) \) for the input
   data. This representation is parameterized using a Non Linear Multilayer
-  Perceptron (`torch.nn.Module`). This is a helper function designed to
+  Perceptron (`torch.nn.Module`) or a Mixture of Experts. This is a helper function designed to
   instantiate the representation for Deep Clustering Survival Machines.
 
   .. warning::
@@ -30,10 +93,16 @@ def create_representation(inputdim, layers, activation):
       A list consisting of the number of neurons in each hidden layer.
   activation: str
       Choice of activation function: One of 'ReLU6', 'ReLU' or 'SeLU'.
+  use_moe: bool
+      Whether to use Mixture of Experts instead of standard MLP.
+  num_experts: int
+      Number of experts to use if use_moe=True.
+  top_k: int or None
+      If not None and use_moe=True, only use top-k experts by gating weight.
 
   Returns
   ----------
-  an MLP with torch.nn.Module with the specfied structure.
+  an MLP or MoE with torch.nn.Module with the specfied structure.
 
   """
 
@@ -47,9 +116,12 @@ def create_representation(inputdim, layers, activation):
     modules = []
     prevdim = inputdim
 
-    for hidden in layers:
-        modules.append(nn.Linear(prevdim, hidden, bias=False))  # .cuda()
-        modules.append(act)
+    for idx, hidden in enumerate(layers):
+        if use_moe and idx == 0:  # Use MoE for first layer only
+            modules.append(MixtureOfExpertsLayer(prevdim, hidden, num_experts, top_k=top_k))
+        else:
+            modules.append(nn.Linear(prevdim, hidden, bias=False))
+            modules.append(act)
         prevdim = hidden
 
     return nn.Sequential(*modules)
@@ -131,7 +203,8 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
 
     def __init__(self, inputdim, k, layers=None, dist='Weibull',
                  temp=1000., discount=1.0, optimizer='Adam',
-                 risks=1, random_state=42, fix=False, is_seed=False):
+                 risks=1, random_state=42, fix=False, is_seed=False,
+                 use_moe=False, num_experts=4, top_k=None):
         super(DeepClusteringSurvivalMachinesTorch, self).__init__()
 
         self.k = k
@@ -140,6 +213,9 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         self.discount = float(discount)
         self.optimizer = optimizer
         self.risks = risks
+        self.use_moe = use_moe
+        self.num_experts = num_experts
+        self.top_k = top_k
 
         if layers is None: layers = []
         self.layers = layers
@@ -154,7 +230,8 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         self.is_seed = is_seed
 
         self._init_dcsm_layers(lastdim)
-        self.embedding = create_representation(inputdim, layers, 'ReLU6')
+        self.embedding = create_representation(inputdim, layers, 'ReLU6', 
+                                              use_moe=use_moe, num_experts=num_experts, top_k=top_k)
 
     def forward(self, x, risk='1'):
         """The forward function that is called when data is passed through DCSM.

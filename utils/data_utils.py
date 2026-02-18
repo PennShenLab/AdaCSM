@@ -513,15 +513,13 @@ def print_missing_prop(covariates):
 
 def impute_missing(data, imputation_values):
     copy = data.copy()
-    for i in np.arange(len(data)):
-        row = data[i]
-        # Handle both numeric and object dtypes
-        if row.dtype == object:
-            # For object arrays, check for None or NaN string values
-            indices = np.array([pd.isna(x) for x in row])
-        else:
-            # For numeric arrays, use np.isnan
-            indices = np.isnan(row)
+    # Ensure data is float array to use np.isnan
+    if copy.dtype == object:
+        copy = copy.astype(float)
+    
+    for i in np.arange(len(copy)):
+        row = copy[i]
+        indices = np.isnan(row)
 
         for idx in np.arange(len(indices)):
             if indices[idx]:

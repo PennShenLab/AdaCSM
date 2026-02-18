@@ -25,10 +25,18 @@ def init_config():
                         help='specifies the number of features for simulation data')
     parser.add_argument('--cuda_device', default=0, type=int,
                         help='specifies the index of the cuda device')
+    parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate for optimizer')
+    parser.add_argument('--layers', default='[50]', type=str, help='hidden layer sizes as string e.g. "[50]" or "[50,50]"')
     parser.add_argument('--discount', default=0.5, type=float, help='specifies number of discount parameter')
+    parser.add_argument('--iters', default=2000, type=int, help='number of training iterations')
+    parser.add_argument('--patience', default=100, type=int, help='patience for early stopping')
+    parser.add_argument('--early_stopping', default=False, type=bool, help='whether to use early stopping')
     parser.add_argument('--weibull_shape', default=2, type=int, help='specifies the Weibull shape')
     parser.add_argument('--num_cluster', default=2, type=int, help='specifies the number of clusters')
     parser.add_argument('--train_DCSM', default=True, type=bool, help='whether to train DCSM')
+    parser.add_argument('--use_moe', action='store_true', help='use Mixture of Experts instead of MLP')
+    parser.add_argument('--num_experts', default=4, type=int, help='number of experts for MoE')
+    parser.add_argument('--top_k', default=None, type=int, help='use only top-k experts (None = all experts)')
 
     args = parser.parse_args()
     parser.print_help()
@@ -55,13 +63,18 @@ is_normalized = args.is_normalize
 #      Train and Test Models
 ########################################
 
-# this may not be optimal
-param = {'learning_rate': 0.001, 'layers': [50], 'k': 2,
-        'iters': 2000, 'distribution': 'Weibull', 'discount': 0.5}
+# Build param dict from CLI args
+import ast
+layers = ast.literal_eval(args.layers)  # Convert "[50]" string to [50] list
+
+param = {'learning_rate': args.learning_rate, 'layers': layers, 'k': 2,
+        'iters': args.iters, 'distribution': 'Weibull', 'discount': args.discount,
+        'patience': args.patience, 'early_stopping': args.early_stopping}
+
 
 # hold out testing with different splitting using the same parameters set
 for seed in [42, 73, 666, 777, 1009]:
-
+# for seed in [42]:
     X_train, X_test, y_train, y_test, _ = load_data(args, random_state=seed)
 
     print('-------------------------dataset: {}, train shape: {}, seed {}-----------------'
@@ -76,14 +89,19 @@ for seed in [42, 73, 666, 777, 1009]:
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.transform(X_test)
+        # X_test = scaler.fit_transform(X_test)
     else:
         print('Data are not normalized')
 
     if args.train_DCSM:
         print('-----------------------------train and test DCSM-------------------------------')
         model, c_index, pred_DCSM, pred_time_DCSM, rae_nc_DCSM, rae_c_DCSM \
-            = train_test_DCSM(param, X_train, X_test, y_train, y_test, fix=True, method='DCSM')
-        with open('models/DCSM_{}_seed{}.pkl'.format(data_name, seed), 'wb') as file:
+            = train_test_DCSM(param, X_train, X_test, y_train, y_test, fix=True, method='DCSM',
+                             use_moe=args.use_moe, num_experts=args.num_experts, top_k=args.top_k)
+        model_suffix = '_moe' if args.use_moe else ''
+        if args.top_k is not None:
+            model_suffix += f'_topk{args.top_k}'
+        with open('models/DCSM_{}_seed{}{}.pkl'.format(data_name, seed, model_suffix), 'wb') as file:
             pkl.dump(model, file)
     else:
         print('-----------------------------just test DCSM-------------------------------')
@@ -122,10 +140,10 @@ for seed in [42, 73, 666, 777, 1009]:
         logrank_DCSM.append(logrank)
         plot_Weibull_cdf(t_test.max(), shape, scale, data_name=data_name, seed=seed)
 
-low_DCSM, high_DCSM = st.t.interval(alpha=0.95, df=len(result_DCSM)-1, loc=np.mean(result_DCSM), scale=st.sem(result_DCSM))
+low_DCSM, high_DCSM = st.t.interval(0.95, df=len(result_DCSM)-1, loc=np.mean(result_DCSM), scale=st.sem(result_DCSM))
 print('-----------------C Index results-----------------')
 print('DCSM:{:.4f}±{:.4f} from {:.4f} to {:.4f}'.format(np.mean(result_DCSM), np.std(result_DCSM), low_DCSM, high_DCSM))
-low_DCSM, high_DCSM = st.t.interval(alpha=0.95, df=len(logrank_DCSM)-1, loc=np.mean(logrank_DCSM), scale=st.sem(logrank_DCSM))
+low_DCSM, high_DCSM = st.t.interval(0.95, df=len(logrank_DCSM)-1, loc=np.mean(logrank_DCSM), scale=st.sem(logrank_DCSM))
 print('---------------logrank results-----------------')
 print('DCSM:{:.4f}±{:.4f} from {:.4f} to {:.4f}'.format(np.mean(logrank_DCSM), np.std(logrank_DCSM), low_DCSM, high_DCSM))
 print('---------------rae_nc results-----------------')

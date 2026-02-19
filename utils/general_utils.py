@@ -23,7 +23,10 @@ def combine_t_e(t, e):  # t is for time and e is for event (indicator)
     return y
 
 
-def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False, method='DCSM', use_moe=False, num_experts=4, top_k=None):
+def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False, method='DCSM',
+                   use_moe=False, num_experts=4, top_k=None,
+                   moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0,
+                   weight_decay=0.0, load_balance_lambda=0.0, progress_every=0):
     print('param: ', param)
     e_train = np.array([[item[0] * 1 for item in y_train]]).T
     t_train = np.array([[item[1] for item in y_train]]).T
@@ -32,7 +35,11 @@ def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False
 
     model = DeepClusteringSurvivalMachines(k=param['k'], fix=fix, distribution=param['distribution'],
                  layers=param['layers'], discount=param['discount'],
-                 random_state=seed, is_seed=True, use_moe=use_moe, num_experts=num_experts, top_k=top_k)
+                 random_state=seed, is_seed=True, use_moe=use_moe, num_experts=num_experts, top_k=top_k,
+                 moe_dropout=moe_dropout, gate_dropout=gate_dropout,
+                 gate_temperature=gate_temperature, routing_noise_std=routing_noise_std,
+                 weight_decay=weight_decay, load_balance_lambda=load_balance_lambda,
+                 progress_every=progress_every)
 
     print('method: ', method)
     if use_moe:
@@ -47,7 +54,9 @@ def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False
     model.fit([X_train, X_test], [t_train, t_test], [e_train, e_test],
               iters=param['iters'], learning_rate=param['learning_rate'],
               patience=param.get('patience', 100),
-              early_stopping=param.get('early_stopping', False))
+              early_stopping=param.get('early_stopping', False),
+              weight_decay=weight_decay, load_balance_lambda=load_balance_lambda,
+              progress_every=progress_every)
     processed_data = model._preprocess_training_data(X_train, t_train, e_train,
                                                      vsize=0.15, val_data=None, random_state=100)
     x_train, t_train, e_train, x_val, t_val, e_val = processed_data

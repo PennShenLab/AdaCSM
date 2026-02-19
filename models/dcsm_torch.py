@@ -12,7 +12,7 @@ import numpy as np
 
 
 class MixtureOfExpertsLayer(nn.Module):
-    """Mixture of Experts Layer for representation learning.
+    """Mixture of Experts layer for DCSM.
     
     Parameters
     ----------
@@ -24,35 +24,81 @@ class MixtureOfExpertsLayer(nn.Module):
         Number of expert networks.
     top_k : int or None
         If None, use all experts. If int, use only top-k experts by gating weight.
+    dropout : float, optional
+        Dropout rate for expert networks (default: 0.0, disabled).
+    gate_dropout : float, optional
+        Dropout rate for gating network (default: 0.0, disabled).
+    temperature : float, optional
+        Temperature for gating softmax (default: 1.0, no temperature scaling).
+    routing_noise_std : float, optional
+        Std of noise added to routing during training (default: 0.0, disabled).
     """
     
-    def __init__(self, inputdim, hidden, num_experts=4, top_k=None):
+    def __init__(self, inputdim, hidden, num_experts=4, top_k=None,
+                 dropout=0.0, gate_dropout=0.0, temperature=1.0, routing_noise_std=0.0):
         super(MixtureOfExpertsLayer, self).__init__()
         self.num_experts = num_experts
         self.hidden = hidden
         self.top_k = top_k if top_k is not None else num_experts  # Default: use all experts
+        self.dropout = dropout
+        self.gate_dropout = gate_dropout
+        self.temperature = temperature
+        self.routing_noise_std = routing_noise_std
         
         # Ensure top_k doesn't exceed num_experts
         if self.top_k > num_experts:
             self.top_k = num_experts
         
-        # Create expert networks
-        self.experts = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(inputdim, hidden, bias=False),
-                nn.ReLU6()
-            ) for _ in range(num_experts)
-        ])
+        # Create expert networks (with optional dropout)
+        if dropout > 0:
+            self.experts = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(inputdim, hidden, bias=False),
+                    nn.ReLU6(),
+                    nn.Dropout(dropout)
+                ) for _ in range(num_experts)
+            ])
+        else:
+            self.experts = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(inputdim, hidden, bias=False),
+                    nn.ReLU6()
+                ) for _ in range(num_experts)
+            ])
         
-        # Gating network
-        self.gate = nn.Sequential(
-            nn.Linear(inputdim, num_experts),
-            nn.Softmax(dim=-1)
-        )
+        # Gating network (with optional dropout)
+        if gate_dropout > 0:
+            self.gate = nn.Sequential(
+                nn.Dropout(gate_dropout),
+                nn.Linear(inputdim, num_experts)
+            )
+        else:
+            # Use simple Sequential with Softmax for default behavior (temperature=1.0)
+            if temperature == 1.0 and routing_noise_std == 0.0:
+                self.gate = nn.Sequential(
+                    nn.Linear(inputdim, num_experts),
+                    nn.Softmax(dim=-1)
+                )
+            else:
+                # Use separate Linear when temperature or noise is enabled
+                self.gate = nn.Linear(inputdim, num_experts)
     
     def forward(self, x):
         # Compute gate weights
-        gate_weights = self.gate(x)  # [batch, num_experts]
+        if isinstance(self.gate, nn.Sequential):
+            # Simple case: gate includes Softmax (temperature=1.0, no noise)
+            gate_weights = self.gate(x)  # [batch, num_experts]
+        else:
+            # Advanced case: apply temperature scaling and/or routing noise
+            gate_logits = self.gate(x)  # [batch, num_experts]
+            
+            # Add routing noise during training (if enabled)
+            if self.training and self.routing_noise_std > 0:
+                noise = torch.randn_like(gate_logits) * self.routing_noise_std
+                gate_logits = gate_logits + noise
+            
+            # Apply temperature scaling and softmax
+            gate_weights = torch.softmax(gate_logits / self.temperature, dim=-1)
         
         # Apply top-k masking if needed
         if self.top_k < self.num_experts:
@@ -74,7 +120,8 @@ class MixtureOfExpertsLayer(nn.Module):
         return output
 
 
-def create_representation(inputdim, layers, activation, use_moe=False, num_experts=4, top_k=None):
+def create_representation(inputdim, layers, activation, use_moe=False, num_experts=4, top_k=None,
+                         moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0):
     r"""Helper function to generate the representation function for DCSM.
 
   Deep Clustering Survival Machines learns a representation (\ Phi(X) \) for the input
@@ -118,7 +165,10 @@ def create_representation(inputdim, layers, activation, use_moe=False, num_exper
 
     for idx, hidden in enumerate(layers):
         if use_moe and idx == 0:  # Use MoE for first layer only
-            modules.append(MixtureOfExpertsLayer(prevdim, hidden, num_experts, top_k=top_k))
+            modules.append(MixtureOfExpertsLayer(prevdim, hidden, num_experts, top_k=top_k,
+                                                 dropout=moe_dropout, gate_dropout=gate_dropout,
+                                                 temperature=gate_temperature,
+                                                 routing_noise_std=routing_noise_std))
         else:
             modules.append(nn.Linear(prevdim, hidden, bias=False))
             modules.append(act)
@@ -204,7 +254,8 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
     def __init__(self, inputdim, k, layers=None, dist='Weibull',
                  temp=1000., discount=1.0, optimizer='Adam',
                  risks=1, random_state=42, fix=False, is_seed=False,
-                 use_moe=False, num_experts=4, top_k=None):
+                 use_moe=False, num_experts=4, top_k=None,
+                 moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0):
         super(DeepClusteringSurvivalMachinesTorch, self).__init__()
 
         self.k = k
@@ -216,6 +267,10 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         self.use_moe = use_moe
         self.num_experts = num_experts
         self.top_k = top_k
+        self.moe_dropout = moe_dropout
+        self.gate_dropout = gate_dropout
+        self.gate_temperature = gate_temperature
+        self.routing_noise_std = routing_noise_std
 
         if layers is None: layers = []
         self.layers = layers
@@ -231,7 +286,10 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
 
         self._init_dcsm_layers(lastdim)
         self.embedding = create_representation(inputdim, layers, 'ReLU6', 
-                                              use_moe=use_moe, num_experts=num_experts, top_k=top_k)
+                                              use_moe=use_moe, num_experts=num_experts, top_k=top_k,
+                                              moe_dropout=moe_dropout, gate_dropout=gate_dropout,
+                                              gate_temperature=gate_temperature,
+                                              routing_noise_std=routing_noise_std)
 
     def forward(self, x, risk='1'):
         """The forward function that is called when data is passed through DCSM.

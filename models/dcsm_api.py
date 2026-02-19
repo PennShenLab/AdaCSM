@@ -16,7 +16,9 @@ class DCSMBase():
 
     def __init__(self, k=3, layers=None, distribution="Weibull",
                  temp=1000., discount=1.0, random_state=42, fix=False, is_seed=False,
-                 use_moe=False, num_experts=4, top_k=None):
+                 use_moe=False, num_experts=4, top_k=None,
+                 moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0,
+                 weight_decay=0.0, load_balance_lambda=0.0, progress_every=0):
         self.k = k
         self.layers = layers
         self.dist = distribution
@@ -26,6 +28,13 @@ class DCSMBase():
         self.use_moe = use_moe
         self.num_experts = num_experts
         self.top_k = top_k
+        self.moe_dropout = moe_dropout
+        self.gate_dropout = gate_dropout
+        self.gate_temperature = gate_temperature
+        self.routing_noise_std = routing_noise_std
+        self.weight_decay = weight_decay
+        self.load_balance_lambda = load_balance_lambda
+        self.progress_every = progress_every
 
         self.random_state = random_state
         self.fix = fix
@@ -47,12 +56,17 @@ class DCSMBase():
                                          is_seed=self.is_seed,
                                          use_moe=self.use_moe,
                                          num_experts=self.num_experts,
-                                         top_k=self.top_k)  # .cuda()
+                                         top_k=self.top_k,
+                                         moe_dropout=self.moe_dropout,
+                                         gate_dropout=self.gate_dropout,
+                                         gate_temperature=self.gate_temperature,
+                                         routing_noise_std=self.routing_noise_std)  # .cuda()
 
     def fit(self, x, t, e, vsize=0.15, val_data=None,
             iters=10000, learning_rate=1e-3, batch_size=100,
             elbo=True, optimizer="Adam", random_state=100,
-            patience=100, early_stopping=True):
+            patience=100, early_stopping=True,
+            weight_decay=0.0, load_balance_lambda=0.0, progress_every=0):
 
         r"""This method is used to train an instance of the DCSM model.
 
@@ -113,7 +127,10 @@ class DCSMBase():
                              elbo=elbo,
                              bs=batch_size,
                              patience=patience,
-                             early_stopping=early_stopping)
+                             early_stopping=early_stopping,
+                             weight_decay=weight_decay,
+                             load_balance_lambda=load_balance_lambda,
+                             progress_every=progress_every)
 
         self.torch_model = model.eval()
         self.fitted = True

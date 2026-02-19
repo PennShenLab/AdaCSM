@@ -41,7 +41,7 @@ def unconditional_loss(model, t, e, risk='1'):
                                   ' not implemented yet.')
 
 
-def _conditional_weibull_loss(model, x, t, e, elbo=True, risk='1'):
+def _conditional_weibull_loss(model, x, t, e, elbo=True, risk='1', load_balance_lambda=0.0):
     alpha = model.discount
     shape, scale, logits = model.forward(x, risk)
 
@@ -84,13 +84,31 @@ def _conditional_weibull_loss(model, x, t, e, elbo=True, risk='1'):
     uncens = np.where(e.cpu().data.numpy() == int(risk))[0]
     cens = np.where(e.cpu().data.numpy() != int(risk))[0]
     ll = lossf[uncens].sum() + alpha * losss[cens].sum()
+    
+    main_loss = -ll / float(len(uncens) + len(cens))
+    
+    # Add load balancing loss if using MoE and lambda > 0
+    if load_balance_lambda > 0 and hasattr(model, 'use_moe') and model.use_moe:
+        # Compute load balancing loss based on gate weights
+        # This encourages even distribution of samples across experts
+        gate_softmax = nn.Softmax(dim=1)(logits)  # [batch, k] - gate weights
+        
+        # Mean gate activation per expert
+        expert_loads = gate_softmax.mean(dim=0)  # [k]
+        
+        # Load balancing loss: penalize deviation from uniform distribution
+        # Target is uniform (1/num_experts)
+        target_load = 1.0 / model.k
+        lb_loss = torch.mean((expert_loads - target_load)**2)
+        
+        main_loss = main_loss + load_balance_lambda * lb_loss
+    
+    return main_loss
 
-    return -ll / float(len(uncens) + len(cens))
 
-
-def conditional_loss(model, x, t, e, elbo=True, risk='1'):
+def conditional_loss(model, x, t, e, elbo=True, risk='1', load_balance_lambda=0.0):
     if model.dist == 'Weibull':
-        return _conditional_weibull_loss(model, x, t, e, elbo, risk)
+        return _conditional_weibull_loss(model, x, t, e, elbo, risk, load_balance_lambda)
     else:
         raise NotImplementedError('Distribution: ' + model.dist +
                                   ' not implemented yet.')
@@ -215,3 +233,43 @@ def predict_cdf(model, x, t_horizon, risk='1'):
     else:
         raise NotImplementedError('Distribution: ' + model.dist +
                                   ' not implemented yet.')
+
+
+def compute_load_balance_loss(model):
+    """Compute load balancing loss to encourage uniform expert usage.
+    
+    This loss encourages all experts to be used roughly equally across the batch,
+    preventing routing collapse where all samples route to a few experts.
+    
+    Args:
+        model: DCSM model
+        
+    Returns:
+        load_balance_loss: scalar tensor representing the load imbalance
+    """
+    if not hasattr(model, 'use_moe') or not model.use_moe:
+        return torch.tensor(0.0).cuda()
+    
+    # Find the MoE layer in the embedding
+    moe_layer = None
+    for module in model.embedding.modules():
+        if hasattr(module, 'last_gate_weights'):
+            moe_layer = module
+            break
+    
+    if moe_layer is None or moe_layer.last_gate_weights is None:
+        return torch.tensor(0.0).cuda()
+    
+    # Get gate weights from last forward pass: [batch_size, num_experts]
+    gate_weights = moe_layer.last_gate_weights
+    
+    # Compute mean usage per expert across batch
+    expert_usage = gate_weights.mean(dim=0)  # [num_experts]
+    
+    # Target is uniform distribution
+    uniform_target = 1.0 / moe_layer.num_experts
+    
+    # Compute variance from uniform target (lower is better)
+    load_balance_loss = ((expert_usage - uniform_target) ** 2).sum()
+    
+    return load_balance_loss

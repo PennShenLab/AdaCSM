@@ -13,13 +13,13 @@ from .losses import unconditional_loss, conditional_loss
 from .losses import predict_cdf
 
 
-def get_optimizer(model, lr):
+def get_optimizer(model, lr, weight_decay=0.0):
     if model.optimizer == 'Adam':
-        return torch.optim.Adam(model.parameters(), lr=lr)
+        return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     elif model.optimizer == 'SGD':
-        return torch.optim.SGD(model.parameters(), lr=lr)
+        return torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay)
     elif model.optimizer == 'RMSProp':
-        return torch.optim.RMSprop(model.parameters(), lr=lr)
+        return torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=weight_decay)
     else:
         raise NotImplementedError('Optimizer ' + model.optimizer +
                                   ' is not implemented')
@@ -109,7 +109,8 @@ def train_dcsm(model,
               x_train, t_train, e_train,
               x_valid, t_valid, e_valid,
               n_iter=10000, lr=1e-3, elbo=True,
-              bs=100, patience=100, early_stopping=True):
+              bs=100, patience=100, early_stopping=True,
+              weight_decay=0.0, load_balance_lambda=0.0, progress_every=0):
     """Function to train the torch instance of the model."""
 
     # For padded variable length sequences we first unroll the input and
@@ -130,8 +131,8 @@ def train_dcsm(model,
 
     # if model.fix == False:
     for r in range(model.risks):
-        model.shape[str(r + 1)].data.fill_(float(premodel.shape[str(r + 1)]))
-        model.scale[str(r + 1)].data.fill_(float(premodel.scale[str(r + 1)]))
+        model.shape[str(r + 1)].data.fill_(premodel.shape[str(r + 1)].detach().item())
+        model.scale[str(r + 1)].data.fill_(premodel.scale[str(r + 1)].detach().item())
 #     else:
 #         for r in range(model.risks):
 #             # initialize using the pretrained shape and scale with a small perturbation,
@@ -144,7 +145,7 @@ def train_dcsm(model,
 #                                                         std=np.abs(float(premodel.scale[str(r + 1)])) / 10)
 
     model.double()
-    optimizer = get_optimizer(model, lr)
+    optimizer = get_optimizer(model, lr, weight_decay=weight_decay)
     nbatches = int(x_train.shape[0] / bs) + 1
 
     best_dic = []
@@ -174,7 +175,8 @@ def train_dcsm(model,
                                          _reshape_tensor_with_nans(tb),
                                          _reshape_tensor_with_nans(eb),
                                          elbo=elbo,
-                                         risk=str(r + 1))
+                                         risk=str(r + 1),
+                                         load_balance_lambda=load_balance_lambda)
             loss.backward()
             optimizer.step()
 
@@ -195,7 +197,6 @@ def train_dcsm(model,
 
         pred_train = predict_risks(model, x_train, t_train_.max())
         pred_val = predict_risks(model, x_valid, t_valid_.max())
-
         # make sure there is no nan, inf and -inf in the prediction
         pred_train = np.nan_to_num(pred_train, nan=0, posinf=0, neginf=0)
         pred_val = np.nan_to_num(pred_val, nan=0, posinf=0, neginf=0)

@@ -37,6 +37,14 @@ def init_config():
     parser.add_argument('--use_moe', action='store_true', help='use Mixture of Experts instead of MLP')
     parser.add_argument('--num_experts', default=4, type=int, help='number of experts for MoE')
     parser.add_argument('--top_k', default=None, type=int, help='use only top-k experts (None = all experts)')
+    # MoE hyperparameters
+    parser.add_argument('--moe_dropout', default=0.0, type=float, help='dropout rate for MoE expert networks')
+    parser.add_argument('--gate_dropout', default=0.0, type=float, help='dropout rate for MoE gate')
+    parser.add_argument('--gate_temperature', default=1.0, type=float, help='temperature for gate softmax')
+    parser.add_argument('--routing_noise_std', default=0.0, type=float, help='std of routing noise during training')
+    parser.add_argument('--weight_decay', default=0.0, type=float, help='weight decay for optimizer')
+    parser.add_argument('--load_balance_lambda', default=0.0, type=float, help='load balancing loss weight for MoE')
+    parser.add_argument('--progress_every', default=0, type=int, help='print progress every N epochs (0 disables)')
 
     args = parser.parse_args()
     parser.print_help()
@@ -97,7 +105,11 @@ for seed in [42, 73, 666, 777, 1009]:
         print('-----------------------------train and test DCSM-------------------------------')
         model, c_index, pred_DCSM, pred_time_DCSM, rae_nc_DCSM, rae_c_DCSM \
             = train_test_DCSM(param, X_train, X_test, y_train, y_test, fix=True, method='DCSM',
-                             use_moe=args.use_moe, num_experts=args.num_experts, top_k=args.top_k)
+                             use_moe=args.use_moe, num_experts=args.num_experts, top_k=args.top_k,
+                             moe_dropout=args.moe_dropout, gate_dropout=args.gate_dropout,
+                             gate_temperature=args.gate_temperature, routing_noise_std=args.routing_noise_std,
+                             weight_decay=args.weight_decay, load_balance_lambda=args.load_balance_lambda,
+                             progress_every=args.progress_every)
         model_suffix = '_moe' if args.use_moe else ''
         if args.top_k is not None:
             model_suffix += f'_topk{args.top_k}'

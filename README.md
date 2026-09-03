@@ -38,13 +38,6 @@ These expert-assignment patterns can also be used for subtype-style clustering a
   <img src="docs/AdaCSM_schema.png" alt="AdaCSM Schema" width="500" />
 </p>
 
-## ✨ Why Use This Repo
-
-- End-to-end training and evaluation for AdaCSM
-- Dedicated reproducibility scripts for cohort-level experiments
-- Built-in baseline lane and AdaCSM lane for clean comparisons
-- Interpretability tooling (gating visualization and feature-attribution scripts)
-
 ## 📦 Repository Scope
 
 - Training and evaluation code: `main.py`, `main_adacsm.py`, `models/`, `utils/`

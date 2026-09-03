@@ -34,7 +34,7 @@ These expert-assignment patterns can also be used for subtype-style clustering a
 
 ## AdaCSM Architecture
 
-![AdaCSM Schema](docs/AdaCSM_schema_page1.png)
+![AdaCSM Schema](docs/AdaCSM_schema.png)
 
 ## Why Use This Repo
 
@@ -48,13 +48,13 @@ These expert-assignment patterns can also be used for subtype-style clustering a
 - Training and evaluation code: `main.py`, `main_adacsm.py`, `models/`, `utils/`
 - Hyperparameter search: `tune_adacsm_optuna.py`
 - Reproducibility scripts: `scripts/`, `plot_km.py`, `plot_pareto_frontier.py`, `visualize_moe_gates.py`
-- Baseline lane scripts: `baselines/run_baseline_models.sh`, `baselines/run_baseline_optuna.sh`, `baselines/run_coxph.sh`
+- Baseline lane scripts: `baselines/run_baseline_models.sh`, `baselines/run_baseline_optuna.sh`
 - AdaCSM lane scripts: `src/run_adacsm_model.sh`, `src/run_adacsm_dense_experiments.sh`, `src/run_adacsm_topk_experiments.sh`, `src/run_adacsm_optuna.sh`
 
 ## Project Layout
 
 - `src/`: AdaCSM-first run entrypoints and wrappers
-- `baselines/`: baseline model run entrypoints (including Cox PH)
+- `baselines/`: baseline model run scripts and python runner
 - `models/adacsm_api.py`, `models/adacsm_torch.py`: AdaCSM-named model modules
 
 ## Data Availability
@@ -94,7 +94,6 @@ Baseline lane:
 ```bash
 bash baselines/run_baseline_models.sh
 bash baselines/run_baseline_optuna.sh
-bash baselines/run_coxph.sh
 ```
 
 AdaCSM lane:

@@ -32,6 +32,13 @@ AdaCSM models survival outcomes with an MoE architecture:
 In practice, this lets AdaCSM capture non-uniform risk structure across populations while preserving a transparent expert-assignment view for analysis.
 These expert-assignment patterns can also be used for subtype-style clustering and patient stratification.
 
+## 🔢 Model Outputs
+
+AdaCSM provides two primary outputs:
+
+1. **Time-to-event prediction**: individualized survival risk/survival-time estimates.
+2. **Subtype clustering**: expert-assignment-based patient subgrouping for stratification and interpretation.
+
 ## 🏗️ AdaCSM Architecture
 
 <p align="center">

@@ -66,16 +66,13 @@ These expert-assignment patterns can also be used for subtype-style clustering a
   - `datasets/flchain.csv`
   - `datasets/pbc2.csv`
   - `datasets/framingham.csv`
-- Not included:
-  - Restricted patient-level data and non-public derivatives
-
-See `DATA_ACCESS.md` for release-policy details.
+- The repository includes the data files used in the released experiments.
 
 ## ⚙️ Environment Setup
 
 ```bash
-conda create -n dcsm python=3.10 -y
-conda activate dcsm
+conda create -n adacsm python=3.10 -y
+conda activate adacsm
 pip install -r requirements.txt
 ```
 
@@ -108,6 +105,14 @@ bash src/run_adacsm_optuna.sh
 
 ## 📚 Citation
 
-```text
 Please cite the ACM paper listed above when using this repository.
+
+```bibtex
+@inproceedings{zhuang2026expert,
+  title={Expert-Driven Survival Machines: Improving Stratification and Interpretability in Multiple Clinical Cohorts},
+  author={Zhuang, Farica and Wen, Zixuan and Davatzikos, Christos and Shen, Li},
+  booktitle={Proceedings of the 17th ACM International Conference on Bioinformatics, Computational Biology and Health Informatics},
+  pages={1--10},
+  year={2026}
+}
 ```

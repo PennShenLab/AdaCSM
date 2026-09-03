@@ -1,152 +1,112 @@
-# Deep Clustering Survival Machines (DCSM)
+# AdaCSM
 
-This repository holds the official code for the paper 
+AdaCSM is a Mixture-of-Experts (MoE) survival modeling framework that combines representation learning, adaptive expert routing, and time-to-event prediction for heterogeneous clinical populations.
 
-* "[*Deep Clustering Survival Machines with Interpretable Expert Distributions*](https://arxiv.org/abs/2301.11826)", 
- published in [ISBI 2023](http://2023.biomedicalimaging.org/en/).  
+This repository provides the official AdaCSM codebase and reproducibility scripts for the ACM publication.
 
-* "[*Interpretable Deep Clustering Survival Machines for Alzheimer’s Disease Subtype Discovery*](https://www.sciencedirect.com/science/article/abs/pii/S1361841524001567)",
- published in [Medical Image Analysis](https://www-sciencedirect-com.proxy.library.upenn.edu/journal/medical-image-analysis)
+## Paper
 
+- ACM publication: [https://dl.acm.org/doi/full/10.1145/3807503.3819574](https://dl.acm.org/doi/full/10.1145/3807503.3819574)
 
-### 🦸‍♀ Motivation
-Conventional survival analysis methods are typically ineffective 
-to characterize heterogeneity (subgrouping characteristic) in the 
-population while such information can be used to assist predictive modeling.
-In this study, we propose a hybrid survival analysis method, referred
-to as **deep clustering survival machines (DCSM)**, that combines the 
-discriminative and generative mechanisms to leverage the heterogeneity 
-to assist time-to-event prediction as well as clustering.
+## Motivation
 
-### 💡 Method
+Clinical survival cohorts are often heterogeneous: different subgroups follow different progression patterns and risk dynamics. A single global survival function can miss this structure.
 
-<img align="right" src="DCSM_model_arch.png" width="500" />
+AdaCSM addresses this by learning:
 
-Similar to the mixture models, we assume that the timing information of 
-survival data is _generatively_ described by a mixture of certain 
-numbers of parametric distributions, i.e., _expert distributions_. 
-We learn weights of the expert distributions for individual instances 
-according to their features _discriminatively_ such that each 
-instance's survival information can be characterized by a weighted 
-combination of the learned constant expert distributions. 
-This method also facilitates interpretable subgrouping/clustering 
-of all instances according to their associated expert distributions.
+- A shared feature representation for survival prediction
+- Multiple expert survival components that capture subgroup-specific behavior
+- An adaptive MoE routing mechanism that selects relevant experts per patient
 
-### 📝 Requirements
+This design improves both predictive flexibility and interpretability of subgroup behavior.
 
-All required libraries are included in the conda environment specified by 
-[`requirements.txt`](requirements.txt). To install and activate it, follow the instructions below:
+## Method At A Glance
 
+AdaCSM models survival outcomes with an MoE architecture:
+
+- **Encoder/Backbone** transforms patient covariates into latent representations
+- **Expert survival heads** model distinct survival patterns
+- **Gating network** produces instance-specific expert weights (or top-k routing)
+- **Aggregated survival prediction** combines expert outputs into final risk/survival estimates
+
+In practice, this lets AdaCSM capture non-uniform risk structure across populations while preserving a transparent expert-assignment view for analysis.
+These expert-assignment patterns can also be used for subtype-style clustering and patient stratification.
+
+## AdaCSM Architecture
+
+![AdaCSM Schema](docs/AdaCSM_schema_page1.png)
+
+## Why Use This Repo
+
+- End-to-end training and evaluation for AdaCSM
+- Dedicated reproducibility scripts for cohort-level experiments
+- Built-in baseline lane and AdaCSM lane for clean comparisons
+- Interpretability tooling (gating visualization and feature-attribution scripts)
+
+## Repository Scope
+
+- Training and evaluation code: `main.py`, `main_adacsm.py`, `models/`, `utils/`
+- Hyperparameter search: `tune_adacsm_optuna.py`
+- Reproducibility scripts: `scripts/`, `plot_km.py`, `plot_pareto_frontier.py`, `visualize_moe_gates.py`
+- Baseline lane scripts: `baselines/run_baseline_models.sh`, `baselines/run_baseline_optuna.sh`, `baselines/run_coxph.sh`
+- AdaCSM lane scripts: `src/run_adacsm_model.sh`, `src/run_adacsm_dense_experiments.sh`, `src/run_adacsm_topk_experiments.sh`, `src/run_adacsm_optuna.sh`
+
+## Project Layout
+
+- `src/`: AdaCSM-first run entrypoints and wrappers
+- `baselines/`: baseline model run entrypoints (including Cox PH)
+- `models/adacsm_api.py`, `models/adacsm_torch.py`: AdaCSM-named model modules
+
+## Data Availability
+
+- Included open datasets:
+  - `datasets/support2.csv`
+  - `datasets/flchain.csv`
+  - `datasets/pbc2.csv`
+  - `datasets/framingham.csv`
+- Not included:
+  - Restricted patient-level data and non-public derivatives
+
+See `DATA_ACCESS.md` for release-policy details.
+
+## Environment Setup
+
+```bash
+conda create -n dcsm python=3.10 -y
+conda activate dcsm
+pip install -r requirements.txt
 ```
-conda create -n DCSM               # create an environment named "DCSM"
-conda activate DCSM                # activate environment
-pip install -r requirements.txt       # install required packages
+
+## Quick Start
+
+Single AdaCSM run:
+
+```bash
+bash src/run_adacsm_model.sh --dataset FRAMINGHAM --num_experts 32 --top_k 2
 ```
 
-### 🔨 Usage
+Supported datasets in this release include `support`, `flchain`, `PBC`, and `FRAMINGHAM`.
 
-File [`main.py`](main.py) trains and evaluates the DCSM model. 
-It accepts following arguments:
+## Reproducibility Workflows
 
-```
-  --dataset DATASET     dataset in [sim, support, flchain, PBC, FRAMINGHAM]
-  --is_normalize IS_NORMALIZE
-                        whether to normalize data
-  --is_cluster IS_CLUSTER
-                        whether to use DCSM to do clustering
-  --is_generate_sim IS_GENERATE_SIM
-                        whether we generate simulation data
-  --is_save_sim IS_SAVE_SIM
-                        whether we save simulation data
-  --num_inst NUM_INST   specifies the number of instances for simulation data
-  --num_feat NUM_FEAT   specifies the number of features for simulation data
-  --cuda_device CUDA_DEVICE
-                        specifies the index of the cuda device
-  --discount DISCOUNT   specifies number of discount parameter
-  --weibull_shape WEIBULL_SHAPE
-                        specifies the Weibull shape
-  --num_cluster NUM_CLUSTER
-                        specifies the number of clusters
-  --train_DCSM TRAIN_DCSM
-                        whether to train DCSM
+Baseline lane:
+
+```bash
+bash baselines/run_baseline_models.sh
+bash baselines/run_baseline_optuna.sh
+bash baselines/run_coxph.sh
 ```
 
-* The DCSM model is implemented in [`models/dcsm_torch.py`](models/dcsm_torch.py) which
-includes definitons for the Deep Clustering Survival Machines module.
-The main interface is the DeepClusteringSurvivalMachines class which inherits
-from torch.nn.Module. 
-* [`models/dcsm_api.py`](models/dcsm_api.py) is a wrapper 
-around torch implementations and provides a convenient API to train 
-Deep Clustering Survival Machines.
-* [`utils/model_utils.py`](utils/model_utils.py) provides several functions 
-for model training utilities.
-* Data are provided in the [`datasets`](datasets) folder, 
-which includes four real-world datasets including support, 
-flchain, PBC and FRAMINGHAM that are presented in our paper. 
-* [`utils/data_utils.py`](utils/data_utils.py) provides the data loader 
-to load these datasets mentioned above. 
-We also provide the functions to generate synthetic data in this file. 
-* In [`utils/losses.py`](utils/losses.py), we define 
-various losses for the censored and uncensored
-instances of data corresponding to Weibull distribution. 
-* [`utils/plottings.py`](utils/plottings.py) provides several functions to 
-plot figures such as the Kaplan-Meier curves.
-* [`utils/general_utils.py`](utils/general-utils.py) provides several helper functions 
-for model training and testing.
+AdaCSM lane:
 
-### 🤝 Acknowledgements
-
-- The real-world datasets and their utility functions for data preprocessing 
-were taken from Nagpal *et al.*'s and 
-[auton-survival repository](https://github.com/autonlab/auton-survival) and 
-Manduchi *et al.*'s [vadesc repository](https://github.com/i6092467/vadesc).
-- The generation process of synthetic data follows Manduchi *et al.*'s 
-[vadesc repository](https://github.com/i6092467/vadesc).
-
-### 📭 Maintainers
-
-[Bojian Hou](http://bojianhou.com) 
-- ([bojian.hou@pennmedicine.upenn.edu](mailto:bojian.hou@pennmedicine.upenn.edu))
-- ([hobo.hbj@gmail.com](mailto:hobo.hbj@gmail.com))
-
-
-### 📚 References
-
-Below are some important references that inspires our work:
-- Chirag Nagpal, Xinyu Li, and Artur Dubrawski, “Deep
-survival machines: Fully parametric survival regression
-and representation learning for censored data with competing risks,” 
-**IEEE Journal of Biomedical and Health
-Informatics**, vol. 25, no. 8, pp. 3163–3175, 2021.
-- Laura Manduchi, Riˇcards Marcinkeviˇcs, Michela C
-Massi, Thomas Weikert, Alexander Sauter, Verena
-Gotta, Timothy M ̈uller, Flavio Vasella, Marian C Neidert, 
-Marc Pfister, et al., “A deep variational approach to clustering survival data,” in
-**Proceedings of the Tenth International Conference on Learning Representations**, 2022.
-- Paidamoyo Chapfuwa, Chunyuan Li, Nikhil Mehta,
-Lawrence Carin, and Ricardo Henao, “Survival cluster analysis,” 
-in **Proceedings of the ACM Conference on Health, Inference, and Learning**, 
-2020, pp. 60–68.
-
-
-### 🙂 Citation
-
+```bash
+bash src/run_adacsm_dense_experiments.sh
+bash src/run_adacsm_topk_experiments.sh
+bash src/run_adacsm_optuna.sh
 ```
-@inproceedings{hou2023deep,
-  title={Deep Clustering Survival Machines with Interpretable Expert Distributions},
-  author={Hou, Bojian and Li, Hongming and Jiao, Zhicheng and Zhou, Zhen and Zheng, Hao and Fan, Yong},
-  booktitle={2023 IEEE 20th International Symposium on Biomedical Imaging (ISBI)},
-  pages={1--4},
-  year={2023},
-  organization={IEEE}
-}
 
-@article{hou2024interpretable,
-  title={Interpretable deep clustering survival machines for Alzheimer’s disease subtype discovery},
-  author={Hou, Bojian and Wen, Zixuan and Bao, Jingxuan and Zhang, Richard and Tong, Boning and Yang, Shu and Wen, Junhao and Cui, Yuhan and Moore, Jason H and Saykin, Andrew J and others},
-  journal={Medical Image Analysis},
-  pages={103231},
-  year={2024},
-  publisher={Elsevier}
-}
+## Citation
+
+```text
+Please cite the ACM paper listed above when using this repository.
 ```

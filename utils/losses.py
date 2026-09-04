@@ -143,7 +143,7 @@ def _weibull_pdf(model, x, t_horizon, risk='1'):
         lpdfs = torch.stack(lpdfs, dim=1)
         lpdfs = lpdfs + logits
         lpdfs = torch.logsumexp(lpdfs, dim=1)
-        pdfs.append(lpdfs.detach().numpy())
+        pdfs.append(lpdfs.detach().cpu().numpy())
 
     return pdfs
 
@@ -158,8 +158,11 @@ def _weibull_cdf(model, x, t_horizon, risk='1'):
     k_ = shape
     b_ = scale
 
-    t_horz = torch.tensor(t_horizon).double()
-    t_horz = t_horz.repeat(shape.shape[0], 1).cuda()
+    t_horz = torch.tensor(
+        t_horizon,
+        dtype=shape.dtype,
+        device=shape.device,
+    ).repeat(shape.shape[0], 1)
 
     cdfs = []
     for j in range(len(t_horizon)):
@@ -247,8 +250,11 @@ def compute_load_balance_loss(model):
     Returns:
         load_balance_loss: scalar tensor representing the load imbalance
     """
+    ref_param = next(model.parameters(), None)
+    device = ref_param.device if ref_param is not None else torch.device("cpu")
+    dtype = ref_param.dtype if ref_param is not None else torch.float32
     if not hasattr(model, 'use_moe') or not model.use_moe:
-        return torch.tensor(0.0).cuda()
+        return torch.tensor(0.0, device=device, dtype=dtype)
     
     # Find the MoE layer in the embedding
     moe_layer = None
@@ -258,7 +264,7 @@ def compute_load_balance_loss(model):
             break
     
     if moe_layer is None or moe_layer.last_gate_weights is None:
-        return torch.tensor(0.0).cuda()
+        return torch.tensor(0.0, device=device, dtype=dtype)
     
     # Get gate weights from last forward pass: [batch_size, num_experts]
     gate_weights = moe_layer.last_gate_weights

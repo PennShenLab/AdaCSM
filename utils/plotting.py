@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
+from matplotlib.ticker import MaxNLocator, StrMethodFormatter, FixedLocator
 from sksurv.nonparametric import kaplan_meier_estimator
 from sksurv.compare import compare_survival
 from sklearn.preprocessing import StandardScaler
@@ -9,6 +10,17 @@ import umap
 from lifelines.statistics import multivariate_logrank_test
 from lifelines import KaplanMeierFitter
 import os
+
+
+def _figure_path(filename: str) -> str:
+    figure_dir = os.environ.get("ADACSM_FIGURE_DIR", "./Figures")
+    os.makedirs(figure_dir, exist_ok=True)
+    return os.path.join(figure_dir, filename)
+
+
+def _maybe_show():
+    if os.environ.get("ADACSM_NO_SHOW", "1") != "1":
+        plt.show()
 
 
 def plot_Weibull_cdf(t_horizon, shape, scale, data_name='sim', num_inst=1000, num_feat=200, seed=42):
@@ -25,16 +37,13 @@ def plot_Weibull_cdf(t_horizon, shape, scale, data_name='sim', num_inst=1000, nu
     # plt.title('Weibull CDF, Data: {}, Seed: {}'.format(data_name, seed))
     plt.title('Weibull CDF, Data: {}'.format(data_name), fontsize=16)
     
-    # Create Figures directory if it doesn't exist
-    os.makedirs('./Figures', exist_ok=True)
-    
     if data_name == 'sim':
-        plt.savefig('./Figures/Weibull_cdf_#clusters{}_{}_{}x{}_seed{}.png'.
-                    format(len(shape), data_name, num_inst, num_feat, seed))
+        plt.savefig(_figure_path('Weibull_cdf_#clusters{}_{}_{}x{}_seed{}.png'.
+                    format(len(shape), data_name, num_inst, num_feat, seed)))
     else:
-        plt.savefig('./Figures/Weibull_cdf_#clusters{}_{}_seed{}.png'.
-                    format(len(shape), data_name, seed))
-    plt.show()
+        plt.savefig(_figure_path('Weibull_cdf_#clusters{}_{}_seed{}.png'.
+                    format(len(shape), data_name, seed)))
+    _maybe_show()
     plt.close()
 
 
@@ -56,7 +65,7 @@ def plot_loss_c_index(results_all, lr, epoch, bs):
     ax2.legend(loc=0)
     ax.grid()
     plt.title('lr: {:.2e}, epoch: {}, batch_size: {}'.format(lr, epoch, bs))
-    plt.show()
+    _maybe_show()
     plt.close()
 
 
@@ -98,7 +107,7 @@ def visualize(X_train_list, X_test_list, data_name, is_normalize=0, is_TSNE=1):
     plt.title(data_name)
     # plt.legend()
     plt.xlabel('Train Data with #Clusters {}'.format(len(X_train_list)))
-    plt.show()
+    _maybe_show()
     plt.close()
 
     # show each cluster separately on all test data
@@ -113,7 +122,7 @@ def visualize(X_train_list, X_test_list, data_name, is_normalize=0, is_TSNE=1):
     plt.title(data_name)
     # plt.legend()
     plt.xlabel('Train Data with #Clusters {}'.format(len(X_test_list)))
-    plt.show()
+    _maybe_show()
     plt.close()
 
 
@@ -143,7 +152,26 @@ def plot_KM(y_list, cluster_method, data_name,
 
     print('Test statistic of {}: {:.4e}'.format(stage, chisq))
     print('P value of {}: {:.4e}'.format(stage, pval))
-    figure(figsize=(8, 6), dpi=80)
+    fig = figure(figsize=(7.0, 5.0), dpi=300)
+    ax = plt.gca()
+    # Paper-style colors used in plot_km.py:
+    # low-risk: periwinkle blue, high-risk: rose pink.
+    low_risk_color = '#6C7BFF'
+    high_risk_color = '#E75480'
+    cluster_colors = [None] * len(y_list)
+    if len(y_list) == 2:
+        event_rates = []
+        for cluster in y_list:
+            n_events = sum(int(item[0]) for item in cluster)
+            event_rates.append((n_events / len(cluster)) if len(cluster) else 0.0)
+        high_risk_idx = 0 if event_rates[0] > event_rates[1] else 1
+        cluster_colors[high_risk_idx] = high_risk_color
+        cluster_colors[1 - high_risk_idx] = low_risk_color
+    else:
+        palette = plt.cm.Set2(np.linspace(0, 1, len(y_list)))
+        for i in range(len(y_list)):
+            cluster_colors[i] = palette[i]
+
     for idx, cluster in enumerate(y_list):  # each element in the y_list is a cluster
         # use lifelines' KM tool to estimate and plot KM
         # this will provide confidence interval
@@ -151,14 +179,50 @@ def plot_KM(y_list, cluster_method, data_name,
             continue
         if is_lifelines:
             kmf = KaplanMeierFitter()
-            kmf.fit([item[1] for item in cluster], event_observed=[item[0] for item in cluster],
-                    label='Cluster {}, #{}'.format(idx, len(cluster)))
-            kmf.plot_survival_function(ci_show=False, show_censors=True)
+            if len(y_list) == 2:
+                risk_name = "High risk" if cluster_colors[idx] == high_risk_color else "Low risk"
+                label = f"{risk_name} (n={len(cluster)})"
+            else:
+                label = 'Cluster {}, #{}'.format(idx, len(cluster))
+            kmf.fit([item[1] for item in cluster], event_observed=[item[0] for item in cluster], label=label)
+            sf = kmf.survival_function_
+            times = sf.index.to_numpy(dtype=float)
+            surv = sf.iloc[:, 0].to_numpy(dtype=float)
+            ax.step(
+                times,
+                surv,
+                where='post',
+                label=label,
+                color=cluster_colors[idx],
+                linewidth=2.8,
+                alpha=0.9,
+            )
+            et = kmf.event_table
+            censor_mask = et['censored'] > 0
+            if censor_mask.any():
+                censor_times = et.index[censor_mask].to_numpy(dtype=float)
+                censor_surv = kmf.predict(censor_times).to_numpy(dtype=float)
+                ax.scatter(
+                    censor_times,
+                    censor_surv,
+                    marker='|',
+                    s=45,
+                    color=cluster_colors[idx],
+                    alpha=0.95,
+                )
         else:
             # use scikit-survival's KM tool to estimate and plot KM
             # this does not provide confidence interval
             x, y = kaplan_meier_estimator([item[0] for item in cluster], [item[1] for item in cluster])
-            plt.step(x, y, where="post", label='Cluster {}, #{}'.format(idx, len(cluster)))
+            ax.step(
+                x,
+                y,
+                where="post",
+                label='Cluster {}, #{}'.format(idx, len(cluster)),
+                color=cluster_colors[idx],
+                linewidth=2.8,
+                alpha=0.9,
+            )
 
     if is_expert:
         step = 100
@@ -171,21 +235,35 @@ def plot_KM(y_list, cluster_method, data_name,
                 s[j] = -(np.power(np.exp(b) * t_space[j], np.exp(k)))
             plt.plot(t_space, s, label='Expert Distribution {}'.format(i))
 
-    plt.title("LogRank: {:.2f}".format(chisq), fontsize=18)
-    plt.xlabel("Time", fontsize=18)
-    plt.ylabel("Survival Probability", fontsize=18)
-    plt.legend(fontsize=18)
+    plt.title(r"Log-Rank $\chi^2$ = {:.2f}".format(chisq), fontsize=25, pad=16)
+    plt.xlabel("Time (months)", fontsize=22, labelpad=10)
+    plt.ylabel("Survival Probability", fontsize=22, labelpad=12)
+    legend = plt.legend(fontsize=21, loc='lower left', framealpha=0.95, fancybox=True)
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_edgecolor('#D9D9D9')
+    ax.set_facecolor('white')
+    fig.patch.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#6A5E78')
+    ax.spines['bottom'].set_color('#6A5E78')
+    ax.tick_params(axis='both', which='major', labelsize=21, length=6.5, width=1.3, color='#6A5E78')
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True, min_n_ticks=4))
+    ax.xaxis.set_major_formatter(StrMethodFormatter('{x:.0f}'))
+    y_ticks = np.linspace(0.0, 1.0, 6)
+    ax.set_ylim(0.0, 1.0)
+    ax.yaxis.set_major_locator(FixedLocator(y_ticks))
+    ax.yaxis.set_major_formatter(StrMethodFormatter('{x:.1f}'))
+    plt.grid(True, alpha=0.3, linestyle='--')
+    plt.tight_layout()
 
-    # Create Figures directory if it doesn't exist
-    os.makedirs('./Figures', exist_ok=True)
-    
     if data_name == 'sim':
-        plt.savefig('./Figures/{}_{}_KM_plot_#clusters{}_{}_{}x{}_seed{}.png'.
-                    format(cluster_method, stage, len(y_list), data_name, num_inst, num_feat, seed))
+        plt.savefig(_figure_path('{}_{}_KM_plot_#clusters{}_{}_{}x{}_seed{}.png'.
+                    format(cluster_method, stage, len(y_list), data_name, num_inst, num_feat, seed)))
     else:
-        plt.savefig('./Figures/{}_{}_KM_plot_#clusters{}_{}_seed{}.png'.
-                    format(cluster_method, stage, len(y_list), data_name, seed))
-    plt.show()
+        plt.savefig(_figure_path('{}_{}_KM_plot_#clusters{}_{}_seed{}.png'.
+                    format(cluster_method, stage, len(y_list), data_name, seed)))
+    _maybe_show()
     plt.close()
     return pval, chisq
 

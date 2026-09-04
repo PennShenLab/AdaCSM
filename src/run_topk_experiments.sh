@@ -10,16 +10,19 @@
 #   - discount: [0.5, 0.75, 1]
 #   - layers: [[50], [50,50]]
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR/.."
+export MPLBACKEND="${MPLBACKEND:-Agg}"
+export ADACSM_NO_SHOW="${ADACSM_NO_SHOW:-1}"
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
-# Dataset options: support, flchain, PBC, FRAMINGHAM, adni
-DATASET="support"
-# DATASET="flchain"
-# DATASET="PBC"
-# DATASET="FRAMINGHAM"
-# DATASET="adni"
+# Dataset options: support, flchain, PBC, FRAMINGHAM
+# Override without editing file:
+#   DATASET=PBC bash src/run_topk_experiments.sh
+DATASET="${DATASET:-support}"
 
 CUDA_DEVICES=(0 1 2 3)
 DEVICE_INDEX=0
@@ -120,7 +123,7 @@ if [ $TUNE_HYPERPARAMS -eq 1 ]; then
                             echo "Starting experiment: lr=$lr, discount=$discount, layers=$layers, n_experts=$n, top_k=$k on GPU $GPU (job $((job_count+1)))"
                             
                             (
-                                cd /home/fzhuang/mref-ad/DCSM/DCSM
+                                cd "$PROJECT_ROOT"
                                 python -u main.py \
                                     --dataset $DATASET \
                                     --cuda_device $GPU \
@@ -210,7 +213,7 @@ else
                 
                 # Run experiment in background
                 (
-                    cd /home/fzhuang/mref-ad/DCSM/DCSM
+                    cd "$PROJECT_ROOT"
                     python -u main.py \
                         --dataset $DATASET \
                         --cuda_device $GPU \

@@ -9,7 +9,8 @@ from lifelines import KaplanMeierFitter
 from scipy.stats import linregress
 from scipy import stats
 from scipy.stats import weibull_min
-from models.dcsm_api import DeepClusteringSurvivalMachines
+from src.models.adacsm_api import AdaCSMSurvivalMachines
+from baselines.models.dcsm_api import DeepClusteringSurvivalMachines
 
 
 def combine_t_e(t, e):  # t is for time and e is for event (indicator)
@@ -33,7 +34,9 @@ def train_test_DCSM(param, X_train, X_test, y_train, y_test, seed=420, fix=False
     e_test = np.array([[item[0] * 1 for item in y_test]]).T
     t_test = np.array([[item[1] for item in y_test]]).T
 
-    model = DeepClusteringSurvivalMachines(k=param['k'], fix=fix, distribution=param['distribution'],
+    model_cls = AdaCSMSurvivalMachines if method.lower() == "adacsm" else DeepClusteringSurvivalMachines
+    model = model_cls(
+                 k=param['k'], fix=fix, distribution=param['distribution'],
                  layers=param['layers'], discount=param['discount'],
                  random_state=seed, is_seed=True, use_moe=use_moe, num_experts=num_experts, top_k=top_k,
                  moe_dropout=moe_dropout, gate_dropout=gate_dropout,

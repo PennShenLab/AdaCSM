@@ -1,0 +1,31 @@
+# OS / editor
+.DS_Store
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Local environments
+.venv/
+venv/
+
+# Experiment outputs
+tmp_*/
+*.log
+logs/**/*.log
+results/*.db
+results/*.sqlite
+results/*_all_trials.csv
+
+# Large generated artifacts
+Figures/*.png
+Figures/*.pdf
+models/*.pkl
+
+# Restricted data placeholders (do not commit private ADNI derivatives)
+datasets/adni*/
+datasets/ADNI*/
+datasets/*AAL*
+datasets/*freesurfer*

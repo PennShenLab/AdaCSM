@@ -5,10 +5,10 @@ This module provides several functions for model training utilities.
 from tqdm import tqdm
 import numpy as np
 from copy import deepcopy
+import os
 import torch
 import matplotlib.pyplot as plt
 from sksurv.metrics import concordance_index_censored
-from models.dcsm_torch import DeepClusteringSurvivalMachinesTorch
 from .losses import unconditional_loss, conditional_loss
 from .losses import predict_cdf
 
@@ -43,13 +43,23 @@ def plot_loss_c_index(results_all, lr, bs, k, dist, discount):
     ax2.legend(loc=0)
     ax.grid()
     plt.title('lr: {:.2e}, k: {}, bs: {}, {}, discount: {}'.format(lr, k, bs, dist, discount))
-    plt.show()
+    fig_dir = os.environ.get("ADACSM_FIGURE_DIR")
+    if fig_dir:
+        os.makedirs(fig_dir, exist_ok=True)
+        tag = os.environ.get("ADACSM_PLOT_TAG", "run")
+        out_path = os.path.join(fig_dir, f"training_curve_{tag}.png")
+        fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    if os.environ.get("ADACSM_NO_SHOW", "1") != "1":
+        plt.show()
     plt.close()
 
 
 def pretrain_dcsm(model, t_train, e_train, t_valid, e_valid,
                  n_iter=10000, lr=1e-2, thres=1e-4):
-    premodel = DeepClusteringSurvivalMachinesTorch(1, 1,
+    ref_param = next(model.parameters(), None)
+    device = ref_param.device if ref_param is not None else torch.device("cpu")
+    dtype = ref_param.dtype if ref_param is not None else torch.float64
+    premodel = type(model)(1, 1,
                                          dist=model.dist,
                                          risks=model.risks,
                                          optimizer=model.optimizer,
@@ -57,8 +67,7 @@ def pretrain_dcsm(model, t_train, e_train, t_valid, e_valid,
                                          # is_seed=model.is_seed
                                          )  # .cuda()
 
-    premodel.cuda()
-    premodel.double()
+    premodel = premodel.to(device=device, dtype=dtype)
 
     optimizer = get_optimizer(premodel, lr)
 
@@ -112,13 +121,15 @@ def train_dcsm(model,
               bs=100, patience=100, early_stopping=True,
               weight_decay=0.0, load_balance_lambda=0.0, progress_every=0):
     """Function to train the torch instance of the model."""
+    ref_param = next(model.parameters(), None)
+    device = ref_param.device if ref_param is not None else torch.device("cpu")
 
     # For padded variable length sequences we first unroll the input and
     # mask out the padded nans.
-    t_train_ = _reshape_tensor_with_nans(t_train).cuda()
-    e_train_ = _reshape_tensor_with_nans(e_train).cuda()
-    t_valid_ = _reshape_tensor_with_nans(t_valid).cuda()
-    e_valid_ = _reshape_tensor_with_nans(e_valid).cuda()
+    t_train_ = _reshape_tensor_with_nans(t_train).to(device)
+    e_train_ = _reshape_tensor_with_nans(e_train).to(device)
+    t_valid_ = _reshape_tensor_with_nans(t_valid).to(device)
+    e_valid_ = _reshape_tensor_with_nans(e_valid).to(device)
 
     premodel = pretrain_dcsm(model,
                             t_train_,
@@ -144,7 +155,7 @@ def train_dcsm(model,
 #                                            torch.normal(mean=torch.zeros(model.k),
 #                                                         std=np.abs(float(premodel.scale[str(r + 1)])) / 10)
 
-    model.double()
+    model = model.to(device=device)
     optimizer = get_optimizer(model, lr, weight_decay=weight_decay)
     nbatches = int(x_train.shape[0] / bs) + 1
 

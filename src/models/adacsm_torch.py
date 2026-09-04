@@ -1,18 +1,16 @@
-"""Torch model definitons for the Deep Clustering Survival Machines model
+"""Torch model definitons for the AdaCSM model.
 
-This includes definitons for the Deep Clustering Survival Machines module.
-The main interface is the DeepClusteringSurvivalMachines class which inherits
+This includes definitons for the AdaCSM module.
+The main interface is the AdaCSMSurvivalMachinesTorch class which inherits
 from torch.nn.Module.
-
 """
 
 import torch.nn as nn
 import torch
-import numpy as np
 
 
 class MixtureOfExpertsLayer(nn.Module):
-    """Mixture of Experts layer for DCSM.
+    """Mixture of Experts layer for AdaCSM.
     
     Parameters
     ----------
@@ -122,12 +120,12 @@ class MixtureOfExpertsLayer(nn.Module):
 
 def create_representation(inputdim, layers, activation, use_moe=False, num_experts=4, top_k=None,
                          moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0):
-    r"""Helper function to generate the representation function for DCSM.
+    r"""Helper function to generate the representation function for AdaCSM.
 
-  Deep Clustering Survival Machines learns a representation (\ Phi(X) \) for the input
+  AdaCSM learns a representation (\ Phi(X) \) for the input
   data. This representation is parameterized using a Non Linear Multilayer
   Perceptron (`torch.nn.Module`) or a Mixture of Experts. This is a helper function designed to
-  instantiate the representation for Deep Clustering Survival Machines.
+  instantiate the representation for AdaCSM.
 
   .. warning::
     Not designed to be used directly.
@@ -177,86 +175,48 @@ def create_representation(inputdim, layers, activation, use_moe=False, num_exper
     return nn.Sequential(*modules)
 
 
-class DeepClusteringSurvivalMachinesTorch(nn.Module):
-    """A Torch implementation of Deep Clustering Survival Machines model.
-
-  This is an implementation of Deep Clustering Survival Machines model in torch.
-  It inherits from the torch.nn.Module class and includes references to the
-  representation learning MLP, the parameters of the underlying distributions
-  and the forward function which is called whenver data is passed to the
-  module. Each of the parameters belongs to nn.Parameters and torch automatically
-  keeps track and computes gradients for them.
-
-  Parameters
-  ----------
-  inputdim: int
-      Dimensionality of the input features.
-  k: int
-      The number of underlying parametric distributions.
-  layers: list
-      A list of integers consisting of the number of neurons in each
-      hidden layer.
-  init: tuple
-      A tuple for initialization of the parameters for the underlying
-      distributions. (shape, scale).
-  activation: str
-      Choice of activation function for the MLP representation.
-      One of 'ReLU6', 'ReLU' or 'SeLU'.
-      Default is 'ReLU6'.
-  dist: str
-      Choice of the underlying survival distributions.
-      One of 'Weibull', 'LogNormal'.
-      Default is 'Weibull'.
-  temp: float
-      The logits for the gate are rescaled with this value.
-      Default is 1000.
-  discount: float
-      a float in [0,1] that determines how to discount the tail bias
-      from the uncensored instances.
-      Default is 1.
-
-  """
+class AdaCSMSurvivalMachinesTorch(nn.Module):
+    """A Torch implementation of AdaCSM model."""
 
     def _init_dcsm_layers(self, lastdim):
-
-        if self.is_seed:  # if is_seed is true, means we use the random seed to fix the initialization
+        if self.is_seed:
             print('random seed for torch model initialization is: ', self.random_state)
-            torch.manual_seed(self.random_state)  # fix the initialization
+            torch.manual_seed(self.random_state)
         if self.dist in ['Weibull']:
             self.act = nn.SELU()
-            if self.fix:  # means using fixed base distribution
+            if self.fix:
                 self.shape = nn.ParameterDict({str(r + 1): nn.Parameter(torch.randn(self.k, requires_grad=True))
-                                               for r in range(self.risks)})  # .cuda()
+                                               for r in range(self.risks)})
                 self.scale = nn.ParameterDict({str(r + 1): nn.Parameter(torch.randn(self.k, requires_grad=True))
-                                               for r in range(self.risks)})  # .cuda()
+                                               for r in range(self.risks)})
             else:
                 self.shape = nn.ParameterDict({str(r + 1): nn.Parameter(-torch.ones(self.k))
-                                               for r in range(self.risks)})  # .cuda()
+                                               for r in range(self.risks)})
                 self.scale = nn.ParameterDict({str(r + 1): nn.Parameter(-torch.ones(self.k))
-                                               for r in range(self.risks)})  # .cuda()
+                                               for r in range(self.risks)})
         else:
             raise NotImplementedError('Distribution: ' + self.dist + ' not implemented' +
                                       ' yet.')
 
         self.gate = nn.ModuleDict({str(r + 1): nn.Sequential(
             nn.Linear(lastdim, self.k, bias=False)
-        ) for r in range(self.risks)})  # .cuda()
+        ) for r in range(self.risks)})
 
-        if self.fix == False:  # means using varied base distribution by discarding these parameters
+        if self.fix == False:
             self.scaleg = nn.ModuleDict({str(r + 1): nn.Sequential(
                 nn.Linear(lastdim, self.k, bias=True)
-            ) for r in range(self.risks)})  # .cuda()
+            ) for r in range(self.risks)})
 
             self.shapeg = nn.ModuleDict({str(r + 1): nn.Sequential(
                 nn.Linear(lastdim, self.k, bias=True)
-            ) for r in range(self.risks)})  # .cuda()
+            ) for r in range(self.risks)})
 
     def __init__(self, inputdim, k, layers=None, dist='Weibull',
                  temp=1000., discount=1.0, optimizer='Adam',
                  risks=1, random_state=42, fix=False, is_seed=False,
                  use_moe=False, num_experts=4, top_k=None,
                  moe_dropout=0.0, gate_dropout=0.0, gate_temperature=1.0, routing_noise_std=0.0):
-        super(DeepClusteringSurvivalMachinesTorch, self).__init__()
+        super(AdaCSMSurvivalMachinesTorch, self).__init__()
 
         self.k = k
         self.dist = dist
@@ -272,7 +232,8 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         self.gate_temperature = gate_temperature
         self.routing_noise_std = routing_noise_std
 
-        if layers is None: layers = []
+        if layers is None:
+            layers = []
         self.layers = layers
 
         if len(layers) == 0:
@@ -285,26 +246,19 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         self.is_seed = is_seed
 
         self._init_dcsm_layers(lastdim)
-        self.embedding = create_representation(inputdim, layers, 'ReLU6', 
+        self.embedding = create_representation(inputdim, layers, 'ReLU6',
                                               use_moe=use_moe, num_experts=num_experts, top_k=top_k,
                                               moe_dropout=moe_dropout, gate_dropout=gate_dropout,
                                               gate_temperature=gate_temperature,
                                               routing_noise_std=routing_noise_std)
 
     def forward(self, x, risk='1'):
-        """The forward function that is called when data is passed through DCSM.
-
-    Args:
-      x:
-        a torch.tensor of the input features.
-
-    """
         xrep = self.embedding(x)
         dim = x.shape[0]
 
-        if self.fix:  # means using fixed base distributions
-            return (self.shape[risk].expand(dim, -1).cuda(),
-                    self.scale[risk].expand(dim, -1).cuda(),
+        if self.fix:
+            return (self.shape[risk].expand(dim, -1),
+                    self.scale[risk].expand(dim, -1),
                     self.gate[risk](xrep) / self.temp)
         else:
             return (self.act(self.shapeg[risk](xrep)) + self.shape[risk].expand(dim, -1),
@@ -315,51 +269,4 @@ class DeepClusteringSurvivalMachinesTorch(nn.Module):
         return self.shape[risk], self.scale[risk]
 
 
-def create_conv_representation(inputdim, hidden,
-                               typ='ConvNet', add_linear=True):
-    r"""Helper function to generate the representation function for DCSM.
-
-  Deep Clustering Survival Machines learns a representation (\ Phi(X) \) for the input
-  data. This representation is parameterized using a Convolutional Neural
-  Network (`torch.nn.Module`). This is a helper function designed to
-  instantiate the representation for Deep Clustering Survival Machines.
-
-  .. warning::
-    Not designed to be used directly.
-
-  Parameters
-  ----------
-  inputdim: tuple
-      Dimensionality of the input image.
-  hidden: int
-      The number of neurons in each hidden layer.
-  typ: str
-      Choice of convolutional neural network: One of 'ConvNet'
-
-  Returns
-  ----------
-  an ConvNet with torch.nn.Module with the specfied structure.
-
-  """
-
-    if typ == 'ConvNet':
-        embedding = nn.Sequential(
-            nn.Conv2d(1, 6, 3),
-            nn.ReLU6(),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(6, 16, 3),
-            nn.ReLU6(),
-            nn.MaxPool2d(2, 2),
-            nn.Flatten(),
-            nn.ReLU6(),
-        )
-
-    if add_linear:
-        dummyx = torch.ones((10, 1) + inputdim)
-        dummyout = embedding.forward(dummyx)
-        outshape = dummyout.shape
-
-        embedding.add_module('linear', torch.nn.Linear(outshape[-1], hidden))
-        embedding.add_module('act', torch.nn.ReLU6())
-
-    return embedding
+AdaCSMMixtureOfExpertsLayer = MixtureOfExpertsLayer

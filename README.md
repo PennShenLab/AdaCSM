@@ -47,17 +47,19 @@ AdaCSM provides two primary outputs:
 
 ## 📦 Repository Scope
 
-- Training and evaluation code: `main.py`, `main_adacsm.py`, `models/`, `utils/`
-- Hyperparameter search: `tune_adacsm_optuna.py`
-- Reproducibility scripts: `scripts/`, `plot_km.py`, `plot_pareto_frontier.py`, `visualize_moe_gates.py`
+- Training and evaluation code: `main.py`, `src/models/`, `baselines/models/`, `utils/`
+- Hyperparameter search: `src/tune_adacsm_optuna_core.py`
+- Reproducibility scripts: `scripts/` (including `scripts/plot_km.py`, `scripts/plot_pareto_frontier.py`, `scripts/visualize_moe_gates.py`)
 - Baseline lane scripts: `baselines/run_baseline_models.sh`, `baselines/run_baseline_optuna.sh`
-- AdaCSM lane scripts: `src/run_adacsm_model.sh`, `src/run_adacsm_dense_experiments.sh`, `src/run_adacsm_topk_experiments.sh`, `src/run_adacsm_optuna.sh`
+- AdaCSM lane scripts: `src/run_adacsm_model.sh`, `src/run_dense_experiments.sh`, `src/run_topk_experiments.sh`, `src/run_adacsm_optuna_tuning.sh`
 
 ## 🗂️ Project Layout
 
-- `src/`: AdaCSM-first run entrypoints and wrappers
-- `baselines/`: baseline model run scripts and python runner
-- `models/adacsm_api.py`, `models/adacsm_torch.py`: AdaCSM-named model modules
+- `src/`: AdaCSM experiment/tuning entrypoints (`src/run_adacsm_model.sh`, `src/run_dense_experiments.sh`, `src/run_topk_experiments.sh`, `src/run_adacsm_optuna_tuning.sh`, `src/tune_adacsm_optuna_core.py`)
+- `src/models/`: AdaCSM model implementations (`src/models/adacsm_api.py`, `src/models/adacsm_torch.py`)
+- `baselines/`: baseline runners (`baselines/run_baselines.py`, `baselines/run_baseline_*.sh`)
+- `baselines/models/`: DCSM baseline model implementations (`baselines/models/dcsm_api.py`, `baselines/models/dcsm_torch.py`)
+- `main.py`: AdaCSM core training runner (MoE-enabled)
 
 ## 🔐 Data Availability
 
@@ -95,13 +97,32 @@ bash baselines/run_baseline_models.sh
 bash baselines/run_baseline_optuna.sh
 ```
 
+You can choose a subset explicitly:
+
+```bash
+conda run -n adacsm python baselines/run_baselines.py \
+  --out-dir logs/paper_baselines \
+  --models coxph,deepcoxph,dsm,dcsm
+```
+
+Notes:
+- Baseline runs are non-interactive and save training/KM figures under `<out-dir>/figures` by default.
+- Quick overrides without editing scripts:
+  - `OUT_DIR=logs/my_baselines bash baselines/run_baseline_models.sh --models coxph,dcsm`
+  - `DATASET=PBC TUNE_TRIALS=20 bash baselines/run_baseline_optuna.sh`
+
 AdaCSM lane:
 
 ```bash
-bash src/run_adacsm_dense_experiments.sh
-bash src/run_adacsm_topk_experiments.sh
-bash src/run_adacsm_optuna.sh
+bash src/run_dense_experiments.sh
+bash src/run_topk_experiments.sh
+bash src/run_adacsm_optuna_tuning.sh
 ```
+
+Quick overrides without editing scripts:
+- `DATASET=PBC bash src/run_dense_experiments.sh`
+- `DATASET=FRAMINGHAM bash src/run_topk_experiments.sh`
+- `DATASET=support TUNE_TRIALS=20 bash src/run_adacsm_optuna_tuning.sh`
 
 ## 📚 Citation
 

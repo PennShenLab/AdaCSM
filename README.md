@@ -32,18 +32,18 @@ AdaCSM models survival outcomes with an MoE architecture:
 In practice, this lets AdaCSM capture non-uniform risk structure across populations while preserving a transparent expert-assignment view for analysis.
 These expert-assignment patterns can also be used for subtype-style clustering and patient stratification.
 
+## 🔢 Model Outputs
+
+AdaCSM provides two primary outputs:
+
+1. **Time-to-event prediction**: individualized survival risk/survival-time estimates.
+2. **Subtype clustering**: expert-assignment-based patient subgrouping for stratification and interpretation.
+
 ## 🏗️ AdaCSM Architecture
 
 <p align="center">
   <img src="docs/AdaCSM_schema.png" alt="AdaCSM Schema" width="500" />
 </p>
-
-## ✨ Why Use This Repo
-
-- End-to-end training and evaluation for AdaCSM
-- Dedicated reproducibility scripts for cohort-level experiments
-- Built-in baseline lane and AdaCSM lane for clean comparisons
-- Interpretability tooling (gating visualization and feature-attribution scripts)
 
 ## 📦 Repository Scope
 
@@ -66,16 +66,13 @@ These expert-assignment patterns can also be used for subtype-style clustering a
   - `datasets/flchain.csv`
   - `datasets/pbc2.csv`
   - `datasets/framingham.csv`
-- Not included:
-  - Restricted patient-level data and non-public derivatives
-
-See `DATA_ACCESS.md` for release-policy details.
+- The repository includes the data files used in the released experiments.
 
 ## ⚙️ Environment Setup
 
 ```bash
-conda create -n dcsm python=3.10 -y
-conda activate dcsm
+conda create -n adacsm python=3.10 -y
+conda activate adacsm
 pip install -r requirements.txt
 ```
 
@@ -108,6 +105,14 @@ bash src/run_adacsm_optuna.sh
 
 ## 📚 Citation
 
-```text
 Please cite the ACM paper listed above when using this repository.
+
+```bibtex
+@inproceedings{zhuang2026expert,
+  title={Expert-Driven Survival Machines: Improving Stratification and Interpretability in Multiple Clinical Cohorts},
+  author={Zhuang, Farica and Wen, Zixuan and Davatzikos, Christos and Shen, Li},
+  booktitle={Proceedings of the 17th ACM International Conference on Bioinformatics, Computational Biology and Health Informatics},
+  pages={1--10},
+  year={2026}
+}
 ```

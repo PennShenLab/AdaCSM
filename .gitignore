@@ -15,9 +15,11 @@ venv/
 tmp_*/
 *.log
 logs/**/*.log
+logs/
 results/*.db
 results/*.sqlite
 results/*_all_trials.csv
+results/
 
 # Large generated artifacts
 Figures/*.png

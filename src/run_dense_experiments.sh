@@ -4,12 +4,15 @@
 # Loops over n (number of experts) values: 1, 2, 4, 8, 16, 32
 # Logs C-index and log-rank metrics with mean and variance
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR/.."
+export MPLBACKEND="${MPLBACKEND:-Agg}"
+export ADACSM_NO_SHOW="${ADACSM_NO_SHOW:-1}"
+
 # Dataset options: support, flchain, PBC, FRAMINGHAM, sim
-# DATASET="support"
-# DATASET="flchain"
-# DATASET="PBC"
-DATASET="FRAMINGHAM"
-# DATASET="adni"
+# Override without editing file:
+#   DATASET=PBC bash src/run_dense_experiments.sh
+DATASET="${DATASET:-FRAMINGHAM}"
 
 CUDA_DEVICES=(0 1 2 3)
 DEVICE_INDEX=1
@@ -134,7 +137,7 @@ if [ $TUNE_HYPERPARAMS -eq 1 ]; then
                                     echo "Starting dense experiment: lr=$lr, discount=$discount, layers=$layers, wd=$wd, moe_drop=$moe_drop, lb=$lb_lambda, temp=$gate_temp, n=$n on GPU $GPU (job $((job_count+1)))"
                                     
                                     (
-                                        cd /home/fzhuang/mref-ad/DCSM/DCSM
+                                        cd "$PROJECT_ROOT"
                                         python -u main.py \
                                             --dataset $DATASET \
                                             --cuda_device ${CUDA_DEVICES[$GPU]} \
@@ -173,7 +176,7 @@ else
         echo "Starting dense experiment: n_experts=$n on GPU $GPU (job $((i+1))/${#n_values[@]})"
         
         (
-            cd /home/fzhuang/mref-ad/DCSM/DCSM
+            cd "$PROJECT_ROOT"
             python main.py \
                 --dataset $DATASET \
                 --cuda_device $GPU \

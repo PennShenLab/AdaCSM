@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Optuna-based hyperparameter tuning for DCSM with MoE.
+Optuna-based hyperparameter tuning for AdaCSM (MoE).
 
 Uses Tree-structured Parzen Estimator (TPE) for intelligent hyperparameter search
 and MedianPruner for early stopping of unpromising trials.
@@ -21,13 +21,15 @@ import optuna
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Optuna hyperparameter tuning for DCSM")
+    parser = argparse.ArgumentParser(description="Optuna hyperparameter tuning for AdaCSM")
     
     # Dataset and experiment settings
     parser.add_argument("--dataset", type=str, required=True,
-                        choices=["support", "flchain", "PBC", "FRAMINGHAM", "adni"],
+                        choices=["support", "flchain", "PBC", "FRAMINGHAM"],
                         help="Dataset to use")
     parser.add_argument("--tune_trials", type=int, default=100,
                         help="Number of Optuna trials to run")
@@ -121,7 +123,7 @@ def objective(trial: optuna.Trial, args: argparse.Namespace, gpu_id: int) -> flo
     try:
         # Build command
         cmd = [
-            "python", "-u", "main.py",
+            "python", "-u", str(ROOT / "main.py"),
             "--dataset", args.dataset,
             "--cuda_device", str(gpu_id),
             "--learning_rate", str(params["lr"]),
@@ -137,7 +139,6 @@ def objective(trial: optuna.Trial, args: argparse.Namespace, gpu_id: int) -> flo
             "--early_stopping", "True",
             "--patience", str(args.patience),
             "--progress_every", str(args.progress_every),
-            "--use_moe",
             "--num_experts", str(params["n_experts"]),
         ]
         
@@ -166,7 +167,7 @@ def objective(trial: optuna.Trial, args: argparse.Namespace, gpu_id: int) -> flo
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd="/home/fzhuang/mref-ad/DCSM/DCSM",
+                cwd=str(ROOT),
                 bufsize=1,
             )
 
@@ -300,7 +301,7 @@ def run_optuna_study(args: argparse.Namespace):
     
     # Setup study name
     if args.study_name is None:
-        args.study_name = f"dcsm_{args.dataset}_moe"
+        args.study_name = f"adacsm_{args.dataset}_moe"
     
     # Create study
     direction = "maximize" if args.select_metric.endswith("cindex") else "minimize"
@@ -401,8 +402,8 @@ def main():
     args = parse_args()
     
     # Check if main.py exists
-    if not os.path.exists("main.py"):
-        print("ERROR: main.py not found. Please run from DCSM/DCSM directory.")
+    if not (ROOT / "main.py").exists():
+        print("ERROR: main.py not found. Please run from the AdaCSM repository.")
         sys.exit(1)
     
     # Run study

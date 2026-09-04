@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Optuna hyperparameter tuning for DCSM with MoE
+# Optuna hyperparameter tuning for AdaCSM with MoE
 # Intelligently searches hyperparameter space using Tree-structured Parzen Estimator (TPE)
 
 # Dataset to tune
-DATASET="FRAMINGHAM"  # Options: support, flchain, PBC, FRAMINGHAM, adni
+DATASET="${DATASET:-FRAMINGHAM}"  # Options: support, flchain, PBC, FRAMINGHAM
 
 # Tuning settings
 TUNE_TRIALS=100       # Number of Optuna trials (100-200 recommended)
@@ -21,14 +21,16 @@ SELECT_METRIC="val_cindex"  # Options: val_cindex, test_cindex, logrank
 
 # Output settings
 OUT_BASE="results/optuna_${DATASET}_moe"
-STUDY_NAME="dcsm_${DATASET}_moe"
+STUDY_NAME="adacsm_${DATASET}_moe"
 STORAGE="sqlite:///results/optuna_${DATASET}.db"
 
 # Create results directory
 mkdir -p results
+export MPLBACKEND="${MPLBACKEND:-Agg}"
+export ADACSM_NO_SHOW="${ADACSM_NO_SHOW:-1}"
 
 echo "============================================"
-echo "DCSM Optuna Hyperparameter Tuning"
+echo "AdaCSM Optuna Hyperparameter Tuning"
 echo "============================================"
 echo "Dataset: $DATASET"
 echo "Trials: $TUNE_TRIALS"
@@ -51,7 +53,7 @@ echo "Log file: $LOG_FILE"
 echo ""
 
 # Run tuning (output to both terminal and log file)
-python3 -u tune_dcsm_optuna.py \
+python3 -u src/tune_adacsm_optuna_core.py \
     --dataset $DATASET \
     --tune_trials $TUNE_TRIALS \
     --tune_epochs $TUNE_EPOCHS \
@@ -75,5 +77,5 @@ echo "  - All trials: ${OUT_BASE}_all_trials.csv"
 echo "  - Database: $STORAGE"
 echo "============================================"
 echo ""
-echo "To use best hyperparameters in run_dense_experiments.sh,"
+echo "To use best hyperparameters in src/run_dense_experiments.sh,"
 echo "extract them from ${OUT_BASE}_best_trial.json"

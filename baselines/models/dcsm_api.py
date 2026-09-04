@@ -39,6 +39,21 @@ class DCSMBase():
         self.random_state = random_state
         self.fix = fix
         self.is_seed = is_seed
+        self.device = self._resolve_device()
+        self.tensor_dtype = torch.float32 if self.device.type == "mps" else torch.float64
+
+    @staticmethod
+    def _resolve_device():
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+
+    def _to_device_tensor(self, value):
+        if isinstance(value, np.ndarray):
+            return torch.from_numpy(value).to(device=self.device, dtype=self.tensor_dtype)
+        return value.to(device=self.device, dtype=self.tensor_dtype)
 
     def _gen_torch_model(self, inputdim, optimizer, risks):
         """Helper function to return a torch model."""
@@ -87,7 +102,7 @@ class DCSMBase():
             The maximum number of training iterations on the training dataset.
         learning_rate: float
             The learning rate for the `Adam` optimizer.
-        batch_size: int
+        batch_size: float
             learning is performed on mini-batches of input data. this parameter
             specifies the size of each mini-batch.
         elbo: bool
@@ -105,9 +120,9 @@ class DCSMBase():
         t, t_test = t
         e, e_test = e
 
-        x_test = torch.from_numpy(x_test).double().cuda()
-        t_test = torch.from_numpy(t_test).double().cuda()
-        e_test = torch.from_numpy(e_test).double().cuda()
+        x_test = self._to_device_tensor(x_test)
+        t_test = self._to_device_tensor(t_test)
+        e_test = self._to_device_tensor(e_test)
 
         processed_data = self._preprocess_training_data(x, t, e,
                                                         vsize, val_data,
@@ -118,7 +133,10 @@ class DCSMBase():
         inputdim = x_train.shape[-1]
 
         maxrisk = int(np.nanmax(e_train.cpu().numpy()))
-        model = self._gen_torch_model(inputdim, optimizer, risks=maxrisk).cuda()
+        model = self._gen_torch_model(inputdim, optimizer, risks=maxrisk).to(
+            device=self.device,
+            dtype=self.tensor_dtype,
+        )
         model, _ = train_dcsm(model,
                              x_train, t_train, e_train,
                              x_test, t_test, e_test,
@@ -172,10 +190,7 @@ class DCSMBase():
         return loss
 
     def _preprocess_test_data(self, x):
-        if isinstance(x, np.ndarray):
-            return torch.from_numpy(x).double().cuda()
-        else:
-            return x.cuda()
+        return self._to_device_tensor(x)
 
     def _preprocess_training_data(self, x, t, e, vsize, val_data, random_state):
 
@@ -184,9 +199,9 @@ class DCSMBase():
         np.random.shuffle(idx)
         x_train, t_train, e_train = x[idx], t[idx], e[idx]
 
-        x_train = torch.from_numpy(x_train).double().cuda()
-        t_train = torch.from_numpy(t_train).double().cuda()
-        e_train = torch.from_numpy(e_train).double().cuda()
+        x_train = self._to_device_tensor(x_train)
+        t_train = self._to_device_tensor(t_train)
+        e_train = self._to_device_tensor(e_train)
 
         if val_data is None:
 
@@ -201,9 +216,9 @@ class DCSMBase():
 
             x_val, t_val, e_val = val_data
 
-            x_val = torch.from_numpy(x_val).double().cuda()
-            t_val = torch.from_numpy(t_val).double().cuda()
-            e_val = torch.from_numpy(e_val).double().cuda()
+            x_val = self._to_device_tensor(x_val)
+            t_val = self._to_device_tensor(t_val)
+            e_val = self._to_device_tensor(e_val)
 
         return (x_train, t_train, e_train, x_val, t_val, e_val)
 
@@ -381,5 +396,3 @@ class DeepClusteringSurvivalMachines(DCSMBase):
         print("Number of underlying distributions (k):", self.k)
         print("Hidden Layers:", self.layers)
         print("Distribution Choice:", self.dist)
-
-
